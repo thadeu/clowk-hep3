@@ -30,12 +30,24 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # Multi-arch image built on NATIVE runners — no QEMU, so no flaky Docker
+  # Hub binfmt pull. Each arch builds + pushes by digest; `manifest` merges
+  # them into the tagged manifest list. Free arm64 runners require a public
+  # repo (or arm runners on the plan); for amd64-only, drop the arm64 entry.
   image:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+            suffix: amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            suffix: arm64
     steps:
       - uses: actions/checkout@v4
-
-      - uses: docker/setup-qemu-action@v3
 
       - uses: docker/setup-buildx-action@v3
 
@@ -50,14 +62,58 @@ jobs:
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      - name: build and push
+      - name: build + push by digest
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
+          platforms: ${{ matrix.platform }}
           build-args: |
             VERSION=${{ steps.version.outputs.version }}
-          tags: |
-            ghcr.io/thadeu/clowk-hep3:latest
-            ghcr.io/thadeu/clowk-hep3:${{ steps.version.outputs.version }}
+          outputs: type=image,name=ghcr.io/thadeu/clowk-hep3,push-by-digest=true,name-canonical=true,push=true
+
+      - name: export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.suffix }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  manifest:
+    needs: image
+    runs-on: ubuntu-latest
+    steps:
+      - name: download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: log in to ghcr
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: derive version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: create manifest list
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+            -t ghcr.io/thadeu/clowk-hep3:latest \
+            -t ghcr.io/thadeu/clowk-hep3:${{ steps.version.outputs.version }} \
+            $(printf 'ghcr.io/thadeu/clowk-hep3@sha256:%s ' *)
