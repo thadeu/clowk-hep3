@@ -1,0 +1,44 @@
+# hep3-server.voodu — the SIP capture COLLECTOR (clowk-hep3, the WRITER).
+#
+# A plain deployment running the public image. It receives HEP3 datagrams
+# on UDP 9060, parses SIP, and writes to the shared Postgres. No kind, no
+# plugin — a deployment already does everything the collector needs.
+#
+#   vd config voip/collector set DATABASE_URL=postgres://user:pass@host/hep
+#   vd apply -f hep3-server
+#
+# Then point your SIP proxy's HEP capture at udp:<vm-ip>:9060. The reader
+# API (voodu-hep3) connects to the SAME DATABASE_URL — it can run on this
+# server or a different one (e.g. collector here, reader elsewhere, both
+# against one RDS).
+
+postgres "hep3" {
+  # image = "postgres:15-alpine"   # optional; default postgres:latest
+  # port = 5432                    # optional; default 5432 (internal, voodu0 only)
+  # username = "user"               # optional; default postgres
+  # password = "pass"               # optional; default random (stored in config bucket)
+}
+
+deployment "fsw" "hep3-server" {
+  image = "ghcr.io/thadeu/clowk-hep3:latest"
+
+  # Public UDP ingest (reachable from the SIP proxy on any host).
+  ports = ["0.0.0.0:9060:9060/udp"]
+
+  # DATABASE_URL (and any secrets) live in the config bucket:
+  #   vd config fsw/hep3 set DATABASE_URL=postgres://...
+  # env_from = ["fsw/hep3"]
+
+  env = {
+    HEP_RETENTION_DAYS = "30"
+    HEP_CID = "X-CID"
+    HEP_EXCEPT_METHODS    = "OPTIONS"
+  }
+
+  resources {
+    limits {
+      cpu    = "0.5"
+      memory = "256Mi"
+    }
+  }
+}
