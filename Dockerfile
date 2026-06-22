@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ── build stage ──────────────────────────────────────────────────────
-FROM golang:1.25-alpine AS build
+FROM golang:1.26-alpine AS build
 
 WORKDIR /src
 
@@ -13,8 +13,8 @@ COPY . .
 
 ARG VERSION=dev
 
-# CGO disabled — modernc.org/sqlite is pure Go, so the binary is fully
-# static and runs on scratch/alpine without libc.
+# CGO disabled — the pgx Postgres driver is pure Go, so the binary is
+# fully static and runs on scratch/alpine without libc.
 RUN CGO_ENABLED=0 go build \
       -trimpath \
       -ldflags "-s -w -X main.version=${VERSION}" \
@@ -26,13 +26,10 @@ FROM alpine:3.20
 
 RUN apk add --no-cache ca-certificates tzdata \
  && addgroup -S hep \
- && adduser -S -G hep hep \
- && mkdir -p /data \
- && chown hep:hep /data
+ && adduser -S -G hep hep
 
 COPY --from=build /out/clowk-hep3 /usr/local/bin/clowk-hep3
 
-VOLUME /data
 USER hep
 
 # 9060/udp: HEP capture ingest.
