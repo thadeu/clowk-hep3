@@ -1,3 +1,6 @@
+// Package ingest receives HEP3 packets off the wire, deduplicates
+// retransmits, parses the SIP payload, and hands SIP messages to a Sink for
+// persistence.
 package ingest
 
 import (

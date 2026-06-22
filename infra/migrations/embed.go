@@ -6,5 +6,8 @@ package migrations
 
 import "embed"
 
+// FS holds the embedded migration SQL files, consumed by the source/iofs
+// golang-migrate driver.
+//
 //go:embed *.sql
 var FS embed.FS

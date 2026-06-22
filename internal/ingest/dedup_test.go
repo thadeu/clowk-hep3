@@ -51,7 +51,10 @@ func TestDeduper_ZeroWindowNeverDedups(t *testing.T) {
 	d := NewDeduper(0)
 	t0 := time.Unix(1700000000, 0)
 
-	if d.Seen(7, t0) || d.Seen(7, t0) {
+	first := d.Seen(7, t0)
+	second := d.Seen(7, t0)
+
+	if first || second {
 		t.Error("zero window should never report duplicates")
 	}
 }
