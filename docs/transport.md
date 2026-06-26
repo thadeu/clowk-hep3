@@ -76,6 +76,31 @@ SIP signaling carries PII (numbers, identities, headers). clowk-hep3 speaks
   SSH) or terminate TLS at a proxy in front of the collector.
 - Native HEP-over-TLS is a future item.
 
+## Shared volume (ndjson) — REQUIRED
+
+On the `ndjson` path the collector (clowk-hep3) and the reader
+([voodu-hep3](https://github.com/thadeu/voodu-hep3)) **share one named
+docker volume** — that volume *is* the writer→reader handoff (it replaces a
+shared database). This imposes hard requirements:
+
+- **Same host.** Docker named volumes are host-local, so collector and
+  reader must run on the **same server** (e.g. SRV-2). The SBC can be
+  elsewhere — it reaches the collector over the network via HEP.
+- **Same volume name.** Both reference it: collector
+  `volumes = ["hep3-data:/data"]` (read-write); reader
+  `volumes = ["hep3-data:/data:ro"]` (read-only, emitted by the plugin's
+  `expand` from the `data_volume` field — default `hep3-data`).
+- **Same uid.** NDJSON files are `0600` (SIP is PII), so the reader must
+  run as the **same uid as the collector**. Both images pin **uid 10001** —
+  don't override the user.
+- **Ownership bootstrap.** The collector image ships `/data` owned by
+  `hep:hep` (uid 10001) and declares `VOLUME /data`, so docker initializes
+  a *fresh* named volume with that ownership. If you pre-create the volume
+  (or reuse one owned by another uid), `chown` it to `10001:10001` first.
+
+On the `pg` path there is **no shared volume** — collector and reader only
+share `DATABASE_URL` and may run on different hosts.
+
 ## Configuration reference
 
 All env vars are documented in the [Configuration](../README.md#configuration)
