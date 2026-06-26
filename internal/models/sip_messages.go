@@ -96,6 +96,13 @@ func (m SipMessage) toRecord() jsonRecord {
 	}
 }
 
+// MarshalRecord renders the message as its on-disk JSON document — one
+// line of NDJSON, or the JSONB payload for a Postgres row. Both store
+// backends share this so the record shape stays identical across them.
+func (m SipMessage) MarshalRecord() ([]byte, error) {
+	return json.Marshal(m.toRecord())
+}
+
 // SipMessages is the write-side repository for the sip_messages table.
 type SipMessages struct {
 	db    *sql.DB
@@ -251,7 +258,7 @@ func (m *SipMessages) Insert(batch []SipMessage) error {
 	}
 
 	for _, msg := range batch {
-		raw, err := json.Marshal(msg.toRecord())
+		raw, err := msg.MarshalRecord()
 		if err != nil {
 			_ = stmt.Close()
 			_ = tx.Rollback()

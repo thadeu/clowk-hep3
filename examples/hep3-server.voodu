@@ -1,38 +1,42 @@
 # hep3-server.voodu — the SIP capture COLLECTOR (clowk-hep3, the WRITER).
 #
-# A plain deployment running the public image. It receives HEP3 datagrams
-# on UDP 9060, parses SIP, and writes to the shared Postgres. No kind, no
-# plugin — a deployment already does everything the collector needs.
+# A plain deployment running the public image. It receives HEP3 over UDP
+# AND TCP on 9060, parses SIP, and (by default) appends NDJSON to a shared
+# volume. No kind, no plugin — a deployment does everything the collector
+# needs.
 #
-#   vd config voip/collector set DATABASE_URL=postgres://user:pass@host/hep
 #   vd apply -f hep3-server
 #
-# Then point your SIP proxy's HEP capture at udp:<vm-ip>:9060. The reader
-# API (voodu-hep3) connects to the SAME DATABASE_URL — it can run on this
-# server or a different one (e.g. collector here, reader elsewhere, both
-# against one RDS).
-
-postgres "hep3" {
-  # image = "postgres:15-alpine"   # optional; default postgres:latest
-  # port = 5432                    # optional; default 5432 (internal, voodu0 only)
-  # username = "user"               # optional; default postgres
-  # password = "pass"               # optional; default random (stored in config bucket)
-}
+# Point your SIP proxy's HEP capture at <vm-ip>:9060 (TCP recommended — see
+# docs/transport.md). The voodu-hep3 reader shares the SAME /data volume
+# (read-only) and serves the data to the webui; reader and collector must
+# run as the same uid.
+#
+# To involve Postgres (fallback / dual-write), see the commented block at
+# the bottom.
 
 deployment "fsw" "hep3-server" {
   image = "ghcr.io/thadeu/clowk-hep3:latest"
 
-  # Public UDP ingest (reachable from the SIP proxy on any host).
-  ports = ["0.0.0.0:9060:9060/udp"]
+  # Public HEP ingest. TCP recommended for cross-VM (reliable, no silent
+  # loss); UDP stays supported. Same port, distinct protocols.
+  ports = [
+    "0.0.0.0:9060:9060/udp",
+    "0.0.0.0:9060:9060/tcp",
+  ]
 
-  # DATABASE_URL (and any secrets) live in the config bucket:
-  #   vd config fsw/hep3 set DATABASE_URL=postgres://...
-  # env_from = ["fsw/hep3"]
+  # NDJSON output (the default store) on a NAMED docker volume. The
+  # voodu-hep3 reader mounts the SAME volume name read-only — both must run
+  # on this host, as the same uid (the image runs as uid 10001).
+  volumes = ["hep3-data:/data"]
 
   env = {
+    HEP_STORE          = "ndjson" # default; "pg" or "pg,ndjson" to involve Postgres
+    HEP_DATA_DIR       = "/data"
+    HEP_TCP_ADDR       = "0.0.0.0:9060"
     HEP_RETENTION_DAYS = "30"
-    HEP_CID = "X-CID"
-    HEP_EXCEPT_METHODS    = "OPTIONS"
+    HEP_CID            = "X-CID"
+    HEP_EXCEPT_METHODS = "OPTIONS"
   }
 
   resources {
@@ -42,3 +46,13 @@ deployment "fsw" "hep3-server" {
     }
   }
 }
+
+# ── Postgres fallback (opt-in) ────────────────────────────────────────
+# To dual-write (warm standby) or use Postgres as the store, add a
+# DATABASE_URL bucket and set HEP_STORE accordingly:
+#
+#   vd config fsw/hep3 set DATABASE_URL=postgres://user:pass@host:5432/hep
+#
+# then on the deployment:  env_from = ["fsw/hep3"]  +  HEP_STORE = "pg,ndjson"
+# Provision Postgres however you like (external/RDS, or a voodu
+# `postgres "fsw" "hep3" {}` resource).

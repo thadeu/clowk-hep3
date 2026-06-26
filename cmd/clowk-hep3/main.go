@@ -12,12 +12,13 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/thadeu/clowk-hep3/internal/config"
 	"github.com/thadeu/clowk-hep3/internal/ingest"
-	"github.com/thadeu/clowk-hep3/internal/models"
+	"github.com/thadeu/clowk-hep3/internal/store"
 )
 
 // version is set via -ldflags at release time.
@@ -37,13 +38,13 @@ func run(logger *log.Logger) error {
 		return err
 	}
 
-	logger.Printf("clowk-hep3 %s starting (hep=%s tcp=%q, writing to postgres)",
-		version, cfg.HEPAddr, cfg.HEPTCPAddr)
+	logger.Printf("clowk-hep3 %s starting (hep=%s tcp=%q, store=%s)",
+		version, cfg.HEPAddr, cfg.HEPTCPAddr, strings.Join(cfg.Stores, ","))
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	st, err := models.NewSipMessages(ctx, cfg.DatabaseURL, cfg.DBBulk, cfg.DBTimer)
+	st, err := store.Open(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -71,8 +72,9 @@ func run(logger *log.Logger) error {
 	return nil
 }
 
-// retentionLoop deletes rows older than retentionDays once an hour.
-func retentionLoop(ctx context.Context, st *models.SipMessages, retentionDays int, logger *log.Logger) {
+// retentionLoop drops data older than retentionDays once an hour. The unit
+// purged is backend-specific (Postgres rows / ndjson files).
+func retentionLoop(ctx context.Context, st store.Store, retentionDays int, logger *log.Logger) {
 	ticker := time.NewTicker(time.Hour)
 	defer ticker.Stop()
 
@@ -87,7 +89,7 @@ func retentionLoop(ctx context.Context, st *models.SipMessages, retentionDays in
 		}
 
 		if n > 0 {
-			logger.Printf("hep3: retention purged %d messages older than %d days", n, retentionDays)
+			logger.Printf("hep3: retention purged %d old item(s) (>%d days)", n, retentionDays)
 		}
 	}
 

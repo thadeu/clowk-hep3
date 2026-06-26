@@ -5,18 +5,28 @@ import (
 	"time"
 )
 
-// DATABASE_URL is required; set a dummy so Load() reaches the rest.
+// withDB sets a dummy DATABASE_URL so tests that don't care about the
+// store backend can load cleanly. (DATABASE_URL is only *required* on the
+// pg path — see TestLoad_DatabaseURLRequiredOnlyForPG.)
 func withDB(t *testing.T) {
 	t.Helper()
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/hep?sslmode=disable")
 }
 
-func TestLoad_RequiresDatabaseURL(t *testing.T) {
-	// No DATABASE_URL set in this test's environment.
+// DATABASE_URL is required only when the pg store is selected; the default
+// (ndjson) loads without it.
+func TestLoad_DatabaseURLRequiredOnlyForPG(t *testing.T) {
+	t.Setenv("HEP_STORE", "")
 	t.Setenv("DATABASE_URL", "")
 
+	if _, err := Load(); err != nil {
+		t.Errorf("default (ndjson) should not require DATABASE_URL: %v", err)
+	}
+
+	t.Setenv("HEP_STORE", "pg")
+
 	if _, err := Load(); err == nil {
-		t.Error("Load() should fail when DATABASE_URL is unset/empty")
+		t.Error("HEP_STORE=pg should require DATABASE_URL")
 	}
 }
 
