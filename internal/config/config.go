@@ -8,6 +8,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -47,6 +48,24 @@ type Config struct {
 	CorrelationHeader string `env:"HEP_CID" envDefault:"X-CID"`
 	// DiscardMethods are SIP request methods dropped before storage.
 	DiscardMethods []string `env:"HEP_EXCEPT_METHODS" envSeparator:","`
+
+	// LogLevel is the minimum log level: debug, info (default), warn, error.
+	// At debug every stored NDJSON record is logged.
+	LogLevel string `env:"LOG_LEVEL" envDefault:"info"`
+}
+
+// SlogLevel maps LogLevel to a slog.Level (defaults to Info).
+func (c Config) SlogLevel() slog.Level {
+	switch c.LogLevel {
+	case "debug":
+		return slog.LevelDebug
+	case "warn":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
 }
 
 const discardMethodsEnv = "HEP_EXCEPT_METHODS"
@@ -99,6 +118,17 @@ func Load() (Config, error) {
 	// DATABASE_URL is required only on the pg path.
 	if c.HasStore("pg") && strings.TrimSpace(c.DatabaseURL) == "" {
 		return Config{}, fmt.Errorf("DATABASE_URL is required when HEP_STORE includes pg")
+	}
+
+	c.LogLevel = strings.ToLower(strings.TrimSpace(c.LogLevel))
+	if c.LogLevel == "" {
+		c.LogLevel = "info"
+	}
+
+	switch c.LogLevel {
+	case "debug", "info", "warn", "error":
+	default:
+		return Config{}, fmt.Errorf("invalid LOG_LEVEL %q (want debug, info, warn, or error)", c.LogLevel)
 	}
 
 	// Default applies only when the var is absent. Present-but-empty

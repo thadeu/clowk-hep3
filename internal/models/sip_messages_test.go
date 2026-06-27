@@ -2,6 +2,7 @@ package models
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"testing"
 	"time"
@@ -18,7 +19,7 @@ func writerModel(t *testing.T) *SipMessages {
 		t.Skip("set TEST_DATABASE_URL to run Postgres-backed writer tests")
 	}
 
-	m, err := NewSipMessages(context.Background(), url, 200, time.Second)
+	m, err := NewSipMessages(context.Background(), url, 200, time.Second, slog.Default())
 	if err != nil {
 		t.Fatalf("NewSipMessages: %v", err)
 	}
@@ -121,7 +122,7 @@ func TestEnqueueFlushesOnClose(t *testing.T) {
 		t.Skip("set TEST_DATABASE_URL to run Postgres-backed writer tests")
 	}
 
-	m, err := NewSipMessages(context.Background(), url, 200, time.Hour) // only Close flushes
+	m, err := NewSipMessages(context.Background(), url, 200, time.Hour, slog.Default()) // only Close flushes
 	if err != nil {
 		t.Fatalf("NewSipMessages: %v", err)
 	}
@@ -138,7 +139,7 @@ func TestEnqueueFlushesOnClose(t *testing.T) {
 		t.Fatalf("Close: %v", err)
 	}
 
-	reopened, err := NewSipMessages(context.Background(), url, 200, time.Second)
+	reopened, err := NewSipMessages(context.Background(), url, 200, time.Second, slog.Default())
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}

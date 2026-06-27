@@ -9,6 +9,9 @@ be `v0.1.0`.
 
 ### Added
 
+- `LOG_LEVEL` (debug/info/warn/error, default info) via `log/slog`. At
+  `debug` every stored NDJSON record is logged (raw_sip included) — handy
+  for inspecting captures in `docker logs` without touching the files.
 - HEP3 capture collector: UDP (and optional TCP) receiver, SIP parser,
   500ms-window dedup, and a batched writer.
 - Postgres storage via `pgx`: one JSONB `data` column with STORED

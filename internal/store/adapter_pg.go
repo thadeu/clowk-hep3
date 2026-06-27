@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/thadeu/clowk-hep3/internal/config"
 	"github.com/thadeu/clowk-hep3/internal/models"
@@ -13,6 +14,6 @@ import (
 // adapter is just the constructor wired to config. Postgres is the opt-in
 // fallback behind HEP_STORE — kept intact so it can be flipped back on, or
 // removed once NDJSON proves out.
-func openPG(ctx context.Context, cfg config.Config) (Store, error) {
-	return models.NewSipMessages(ctx, cfg.DatabaseURL, cfg.DBBulk, cfg.DBTimer)
+func openPG(ctx context.Context, cfg config.Config, logger *slog.Logger) (Store, error) {
+	return models.NewSipMessages(ctx, cfg.DatabaseURL, cfg.DBBulk, cfg.DBTimer, logger)
 }

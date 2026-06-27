@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"sync"
 	"time"
@@ -24,18 +24,18 @@ const maxDatagram = 65535
 type Receiver struct {
 	proc    *Processor
 	workers int
-	log     *log.Logger
+	log     *slog.Logger
 	ch      chan *hep.Packet
 }
 
 // NewReceiver builds a Receiver. workers < 1 is clamped to 1.
-func NewReceiver(proc *Processor, workers int, logger *log.Logger) *Receiver {
+func NewReceiver(proc *Processor, workers int, logger *slog.Logger) *Receiver {
 	if workers < 1 {
 		workers = 1
 	}
 
 	if logger == nil {
-		logger = log.Default()
+		logger = slog.Default()
 	}
 
 	return &Receiver{
@@ -121,7 +121,7 @@ func (r *Receiver) serveUDP(ctx context.Context, addr string) error {
 		return err
 	}
 
-	r.log.Printf("hep3: listening for HEP/UDP on %s", addr)
+	r.log.Info("listening", "proto", "udp", "addr", addr)
 
 	go func() {
 		<-ctx.Done()
@@ -138,7 +138,7 @@ func (r *Receiver) serveUDP(ctx context.Context, addr string) error {
 			}
 
 			// Transient read error — log sparsely and keep going.
-			r.log.Printf("hep3: udp read: %v", err)
+			r.log.Warn("udp read error", "err", err)
 
 			continue
 		}
@@ -161,7 +161,7 @@ func (r *Receiver) serveTCP(ctx context.Context, addr string) error {
 		return err
 	}
 
-	r.log.Printf("hep3: listening for HEP/TCP on %s", addr)
+	r.log.Info("listening", "proto", "tcp", "addr", addr)
 
 	go func() {
 		<-ctx.Done()
@@ -175,7 +175,7 @@ func (r *Receiver) serveTCP(ctx context.Context, addr string) error {
 				return nil
 			}
 
-			r.log.Printf("hep3: tcp accept: %v", err)
+			r.log.Warn("tcp accept error", "err", err)
 
 			continue
 		}

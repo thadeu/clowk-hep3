@@ -9,7 +9,8 @@ package main
 
 import (
 	"context"
-	"log"
+	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"strings"
@@ -25,26 +26,28 @@ import (
 var version = "dev"
 
 func main() {
-	logger := log.New(os.Stderr, "", log.LstdFlags|log.LUTC)
-
-	if err := run(logger); err != nil {
-		logger.Fatalf("clowk-hep3: %v", err)
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "clowk-hep3: %v\n", err)
+		os.Exit(1)
 	}
 }
 
-func run(logger *log.Logger) error {
+func run() error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
 
-	logger.Printf("clowk-hep3 %s starting (hep=%s tcp=%q, store=%s)",
-		version, cfg.HEPAddr, cfg.HEPTCPAddr, strings.Join(cfg.Stores, ","))
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: cfg.SlogLevel()}))
+
+	logger.Info("starting",
+		"version", version, "hep", cfg.HEPAddr, "tcp", cfg.HEPTCPAddr,
+		"store", strings.Join(cfg.Stores, ","), "log_level", cfg.LogLevel)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	st, err := store.Open(ctx, cfg)
+	st, err := store.Open(ctx, cfg, logger)
 	if err != nil {
 		return err
 	}
@@ -67,14 +70,14 @@ func run(logger *log.Logger) error {
 		return err
 	}
 
-	logger.Printf("clowk-hep3: shutting down")
+	logger.Info("shutting down")
 
 	return nil
 }
 
 // retentionLoop drops data older than retentionDays once an hour. The unit
 // purged is backend-specific (Postgres rows / ndjson files).
-func retentionLoop(ctx context.Context, st store.Store, retentionDays int, logger *log.Logger) {
+func retentionLoop(ctx context.Context, st store.Store, retentionDays int, logger *slog.Logger) {
 	ticker := time.NewTicker(time.Hour)
 	defer ticker.Stop()
 
@@ -83,13 +86,13 @@ func retentionLoop(ctx context.Context, st store.Store, retentionDays int, logge
 
 		n, err := st.Purge(ctx, cutoff)
 		if err != nil {
-			logger.Printf("hep3: retention purge: %v", err)
+			logger.Error("retention purge", "err", err)
 
 			return
 		}
 
 		if n > 0 {
-			logger.Printf("hep3: retention purged %d old item(s) (>%d days)", n, retentionDays)
+			logger.Info("retention purged", "items", n, "older_than_days", retentionDays)
 		}
 	}
 

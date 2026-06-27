@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,6 +34,9 @@ type ndjsonStore struct {
 	timer time.Duration
 	now   func() time.Time
 
+	log       *slog.Logger
+	debugDump bool // log every written line (LOG_LEVEL=debug)
+
 	in   chan models.SipMessage
 	done chan struct{}
 
@@ -45,13 +48,17 @@ type ndjsonStore struct {
 	curBucket string
 }
 
-func openNDJSON(dir string, bulk int, flush time.Duration) (*ndjsonStore, error) {
-	return newNDJSONStore(dir, bulk, flush, time.Now)
+func openNDJSON(dir string, bulk int, flush time.Duration, logger *slog.Logger) (*ndjsonStore, error) {
+	return newNDJSONStore(dir, bulk, flush, time.Now, logger)
 }
 
 // newNDJSONStore is the testable constructor: now is injected so rotation
 // and retention can be driven deterministically.
-func newNDJSONStore(dir string, bulk int, flush time.Duration, now func() time.Time) (*ndjsonStore, error) {
+func newNDJSONStore(dir string, bulk int, flush time.Duration, now func() time.Time, logger *slog.Logger) (*ndjsonStore, error) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	if strings.TrimSpace(dir) == "" {
 		return nil, errors.New("HEP_DATA_DIR is required for the ndjson store")
 	}
@@ -71,12 +78,14 @@ func newNDJSONStore(dir string, bulk int, flush time.Duration, now func() time.T
 	}
 
 	s := &ndjsonStore{
-		dir:   dir,
-		bulk:  bulk,
-		timer: flush,
-		now:   now,
-		in:    make(chan models.SipMessage, bulk*4),
-		done:  make(chan struct{}),
+		dir:       dir,
+		bulk:      bulk,
+		timer:     flush,
+		now:       now,
+		log:       logger,
+		debugDump: logger.Enabled(context.Background(), slog.LevelDebug),
+		in:        make(chan models.SipMessage, bulk*4),
+		done:      make(chan struct{}),
 	}
 
 	go s.writeLoop()
@@ -112,7 +121,7 @@ func (s *ndjsonStore) writeLoop() {
 		}
 
 		if err := s.writeBatch(batch); err != nil {
-			log.Printf("hep3 ndjson: write batch of %d failed: %v", len(batch), err)
+			s.log.Error("ndjson write batch failed", "n", len(batch), "err", err)
 		}
 
 		batch = batch[:0]
@@ -151,7 +160,7 @@ func (s *ndjsonStore) writeBatch(batch []models.SipMessage) error {
 		line, err := m.MarshalRecord()
 		if err != nil {
 			// A single un-marshalable record shouldn't sink the batch.
-			log.Printf("hep3 ndjson: marshal record: %v", err)
+			s.log.Warn("ndjson marshal record", "err", err)
 
 			continue
 		}
@@ -162,6 +171,10 @@ func (s *ndjsonStore) writeBatch(batch []models.SipMessage) error {
 
 		if err := s.buf.WriteByte('\n'); err != nil {
 			return err
+		}
+
+		if s.debugDump {
+			s.log.Debug("ndjson record", "line", string(line))
 		}
 	}
 

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -61,7 +62,7 @@ func readAllLines(t *testing.T, dir string) []string {
 func TestNDJSON_WriteReadback(t *testing.T) {
 	dir := t.TempDir()
 
-	s, err := openNDJSON(dir, 2, 20*time.Millisecond)
+	s, err := openNDJSON(dir, 2, 20*time.Millisecond, slog.Default())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +105,7 @@ func TestNDJSON_RotatesHourly(t *testing.T) {
 	dir := t.TempDir()
 	clock := time.Date(2026, 6, 26, 14, 30, 0, 0, time.UTC)
 
-	s := &ndjsonStore{dir: dir, bulk: 100, timer: time.Hour, now: func() time.Time { return clock }}
+	s := &ndjsonStore{dir: dir, bulk: 100, timer: time.Hour, now: func() time.Time { return clock }, log: slog.Default()}
 
 	if err := s.writeBatch([]models.SipMessage{mkMsg(clock, "a")}); err != nil {
 		t.Fatal(err)
@@ -129,7 +130,7 @@ func TestNDJSON_SameHourSingleFile(t *testing.T) {
 	base := time.Date(2026, 6, 26, 14, 0, 0, 0, time.UTC)
 	clock := base
 
-	s := &ndjsonStore{dir: dir, bulk: 100, timer: time.Hour, now: func() time.Time { return clock }}
+	s := &ndjsonStore{dir: dir, bulk: 100, timer: time.Hour, now: func() time.Time { return clock }, log: slog.Default()}
 
 	for i := 0; i < 3; i++ {
 		clock = base.Add(time.Duration(i*10) * time.Minute)
@@ -151,7 +152,7 @@ func TestNDJSON_PurgeDeletesOldBuckets(t *testing.T) {
 	dir := t.TempDir()
 	clock := time.Date(2026, 6, 26, 14, 0, 0, 0, time.UTC)
 
-	s := &ndjsonStore{dir: dir, bulk: 100, timer: time.Hour, now: func() time.Time { return clock }}
+	s := &ndjsonStore{dir: dir, bulk: 100, timer: time.Hour, now: func() time.Time { return clock }, log: slog.Default()}
 
 	if err := s.writeBatch([]models.SipMessage{mkMsg(clock, "old")}); err != nil {
 		t.Fatal(err)
@@ -190,7 +191,7 @@ func TestNDJSON_PurgeDeletesOldBuckets(t *testing.T) {
 func TestNDJSON_PurgeConcurrentWithWrites(t *testing.T) {
 	dir := t.TempDir()
 
-	s, err := openNDJSON(dir, 4, 2*time.Millisecond)
+	s, err := openNDJSON(dir, 4, 2*time.Millisecond, slog.Default())
 	if err != nil {
 		t.Fatal(err)
 	}

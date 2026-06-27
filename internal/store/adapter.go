@@ -15,6 +15,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/thadeu/clowk-hep3/internal/config"
@@ -38,7 +39,11 @@ type Store interface {
 // Open builds the Store selected by cfg.Stores (already normalized +
 // validated by config.Load). A single backend is returned directly; two or
 // more are wrapped in a tee that fans writes out to each.
-func Open(ctx context.Context, cfg config.Config) (Store, error) {
+func Open(ctx context.Context, cfg config.Config, logger *slog.Logger) (Store, error) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	stores := make([]Store, 0, len(cfg.Stores))
 
 	for _, name := range cfg.Stores {
@@ -49,9 +54,9 @@ func Open(ctx context.Context, cfg config.Config) (Store, error) {
 
 		switch name {
 		case "ndjson":
-			s, err = openNDJSON(cfg.DataDir, cfg.DBBulk, cfg.DBTimer)
+			s, err = openNDJSON(cfg.DataDir, cfg.DBBulk, cfg.DBTimer, logger)
 		case "pg":
-			s, err = openPG(ctx, cfg)
+			s, err = openPG(ctx, cfg, logger)
 		default:
 			err = fmt.Errorf("unknown store %q", name)
 		}

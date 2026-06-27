@@ -17,7 +17,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -110,11 +110,16 @@ type SipMessages struct {
 	bulk  int
 	timer time.Duration
 	done  chan struct{}
+	log   *slog.Logger
 }
 
 // NewSipMessages connects to Postgres, runs migrations, and starts the
 // batching writer. databaseURL is the shared connection string.
-func NewSipMessages(ctx context.Context, databaseURL string, bulk int, flush time.Duration) (*SipMessages, error) {
+func NewSipMessages(ctx context.Context, databaseURL string, bulk int, flush time.Duration, logger *slog.Logger) (*SipMessages, error) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("open postgres: %w", err)
@@ -150,6 +155,7 @@ func NewSipMessages(ctx context.Context, databaseURL string, bulk int, flush tim
 		bulk:  bulk,
 		timer: flush,
 		done:  make(chan struct{}),
+		log:   logger,
 	}
 
 	go m.writeLoop()
@@ -214,7 +220,7 @@ func (m *SipMessages) writeLoop() {
 		}
 
 		if err := m.Insert(batch); err != nil {
-			log.Printf("hep3 sip_messages: insert batch of %d failed: %v", len(batch), err)
+			m.log.Error("pg insert batch failed", "n", len(batch), "err", err)
 		}
 
 		batch = batch[:0]

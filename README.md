@@ -58,6 +58,7 @@ for development. With the default `ndjson` store, **no var is required**.
 | `HEP_RETENTION_DAYS` | `30`           | drop data older than this (0 = keep all)      |
 | `HEP_CID`            | `X-CID`        | SIP header used to stitch B2BUA leg pairs     |
 | `HEP_EXCEPT_METHODS` | `OPTIONS`      | comma-separated SIP methods dropped on ingest |
+| `LOG_LEVEL`          | `info`         | `debug` (logs every stored NDJSON record), `info`, `warn`, `error` |
 
 > **Transport:** HEP3 runs over UDP (default) and TCP (`HEP_TCP_ADDR`, opt-in).
 > For cross-VM captures, prefer TCP — it won't silently drop messages under
