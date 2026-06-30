@@ -123,6 +123,37 @@ func TestProcess_DropsDiscardedMethod(t *testing.T) {
 	}
 }
 
+// A response (200 OK) to a discarded method must be dropped too — it has
+// no request method, so the filter keys off the CSeq method.
+func TestProcess_DropsDiscardedResponseByCSeq(t *testing.T) {
+	sink := &fakeSink{}
+	discard := map[string]struct{}{"OPTIONS": {}}
+	p := newProc(sink, discard, nil)
+
+	pkt := sipPacket("SIP/2.0 200 OK\r\nCall-ID: o2\r\nCSeq: 10 OPTIONS\r\n\r\n")
+
+	if r := p.Process(pkt); r != DroppedMethod {
+		t.Errorf("Process = %v, want DroppedMethod (OPTIONS response)", r)
+	}
+
+	if len(sink.msgs) != 0 {
+		t.Error("OPTIONS 200 OK was stored despite discard set")
+	}
+}
+
+// A response to a NON-discarded method (200 OK to INVITE) is kept.
+func TestProcess_KeepsNonDiscardedResponse(t *testing.T) {
+	sink := &fakeSink{}
+	discard := map[string]struct{}{"OPTIONS": {}}
+	p := newProc(sink, discard, nil)
+
+	pkt := sipPacket("SIP/2.0 200 OK\r\nCall-ID: c1\r\nCSeq: 1 INVITE\r\n\r\n")
+
+	if r := p.Process(pkt); r != Stored {
+		t.Errorf("Process = %v, want Stored (INVITE 200 OK)", r)
+	}
+}
+
 func TestProcess_DropsNoCallID(t *testing.T) {
 	sink := &fakeSink{}
 	p := newProc(sink, nil, nil)

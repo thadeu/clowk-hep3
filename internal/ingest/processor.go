@@ -88,8 +88,16 @@ func (p *Processor) Process(pkt *hep.Packet) Result {
 
 	msg := sip.Parse(string(pkt.Payload), p.corrHdr)
 
-	if msg.IsRequest && len(p.discard) > 0 {
-		if _, drop := p.discard[strings.ToUpper(msg.Method)]; drop {
+	// Method filtering drops the WHOLE transaction — the request AND its
+	// responses. A response carries no request method, so fall back to the
+	// CSeq method (present on both directions), e.g. "10 OPTIONS".
+	if len(p.discard) > 0 {
+		method := msg.Method
+		if method == "" {
+			method = cseqMethod(msg.CSeq)
+		}
+
+		if _, drop := p.discard[strings.ToUpper(method)]; drop {
 			return DroppedMethod
 		}
 	}
@@ -131,6 +139,17 @@ func (p *Processor) Process(pkt *hep.Packet) Result {
 	})
 
 	return Stored
+}
+
+// cseqMethod returns the method token of a CSeq value ("10 OPTIONS" →
+// "OPTIONS"). CSeq is present on requests and responses, so it identifies
+// a response's transaction method when the start line carries none.
+func cseqMethod(cseq string) string {
+	if f := strings.Fields(cseq); len(f) >= 2 {
+		return f[1]
+	}
+
+	return ""
 }
 
 func ipString(ip net.IP) string {

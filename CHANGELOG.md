@@ -7,6 +7,15 @@ be `v0.1.0`.
 
 ## [Unreleased]
 
+### Fixed
+
+- `HEP_EXCEPT_METHODS` now drops the WHOLE transaction, not just the
+  request. A response (e.g. `200 OK` to an `OPTIONS`) carries no request
+  method in its start line — the method lives only in `CSeq`
+  (`10 OPTIONS`) — so the old request-only filter let OPTIONS responses
+  through. The filter now keys off the `CSeq` method, which is present on
+  both directions.
+
 ### Added
 
 - `LOG_LEVEL` (debug/info/warn/error, default info) via `log/slog`. At
